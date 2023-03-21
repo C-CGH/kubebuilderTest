@@ -1,0 +1,6 @@
+domain: cgh.tutorial.kubebuilder.io
+layout:
+- go.kubebuilder.io/v3
+projectName: kubebuildertest
+repo: kubebuilderTest
+version: "3"
