@@ -78,7 +78,7 @@ var (
 )
 
 func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+	ctx = context.Background()
 	log := r.Log.WithValues("cronjob", req.NamespacedName)
 
 	//_ = log.FromContext(ctx)
@@ -409,7 +409,7 @@ func (r *CronJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		r.Clock = realClock{}
 	}
 
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &kbatch.Job{}, jobOwnerKey, func(rawObj runtime.Object) []string {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &kbatch.Job{}, jobOwnerKey, func(rawObj client.Object) []string {
 		//获取 job 对象，提取 owner...
 		job := rawObj.(*kbatch.Job)
 		owner := metav1.GetControllerOf(job)
@@ -428,7 +428,7 @@ func (r *CronJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&batch.CronJob{}).
+		For(&batchv1.CronJob{}).
 		Owns(&kbatch.Job{}).
 		Complete(r)
 
