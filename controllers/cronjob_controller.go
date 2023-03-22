@@ -55,8 +55,8 @@ type Clock interface {
 	Now() time.Time
 }
 
-//+kubebuilder:rbac:groups=batch.tutorial.kubebuilder.io,resources=cronjobs,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=batch.tutorial.kubebuilder.io,resources=cronjobs/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=batch.cgh.tutorial.kubebuilder.io,resources=cronjobs,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=batch.cgh.tutorial.kubebuilder.io,resources=cronjobs/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=batch,resources=jobs/status,verbs=get
 //+kubebuilder:rbac:groups=batch.cgh.tutorial.kubebuilder.io,resources=cronjobs,verbs=get;list;watch;create;update;patch;delete
@@ -74,12 +74,13 @@ type Clock interface {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.12.2/pkg/reconcile
 
 var (
-	scheduledTimeAnnotation = "batch.tutorial.kubebuilder.io/scheduled-at"
+	scheduledTimeAnnotation = "batch.cgh.tutorial.kubebuilder.io/scheduled-at"
 )
 
 func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	ctx = context.Background()
-	log := r.Log.WithValues("cronjob", req.NamespacedName)
+	fmt.Println("req:", req)
+	//log := r.Log.WithValues("cronjob", req.NamespacedName)
 
 	//_ = log.FromContext(ctx)
 
@@ -87,15 +88,16 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// 1.根据名称加载定时任务
 	var cronJob batch.CronJob
 	if err := r.Get(ctx, req.NamespacedName, &cronJob); err != nil {
-		log.Error(err, "unable to fetch CronJob")
+		//log.Error(err, "unable to fetch CronJob")
+		fmt.Println(err, "unable to fetch CronJob")
 		//忽略掉 not-found 错误，它们不能通过重新排队修复（要等待新的通知）
 		//在删除一个不存在的对象时，可能会报这个错误。
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	// 2.列出所有有效 job，更新它们的状态
 	var childJobs kbatch.JobList
-	if err := r.List(ctx, &childJobs, client.InNamespace(req.Namespace), client.MatchingFields{"jobOwnerKey": req.Name}); err != nil {
-		log.Error(err, "unable to list child Jobs")
+	if err := r.List(ctx, &childJobs, client.InNamespace(req.Namespace), client.MatchingFields{jobOwnerKey: req.Name}); err != nil {
+		fmt.Println(err, "unable to list child Jobs")
 		return ctrl.Result{}, err
 	}
 	// 找出所有有效的 job
@@ -141,7 +143,7 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		//将启动时间存放在注释中，当job生效时可以从中读取
 		scheduledTimeForJob, err := getScheduledTimeForJob(&job)
 		if err != nil {
-			log.Error(err, "unable to parse schedule time for child job", "job", &job)
+			fmt.Println(err, "unable to parse schedule time for child job", "job", &job)
 			continue
 		}
 		if scheduledTimeForJob != nil {
@@ -162,18 +164,18 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	for _, activeJob := range activeJobs {
 		jobRef, err := ref.GetReference(r.Scheme, activeJob)
 		if err != nil {
-			log.Error(err, "unable to make reference to active job", "job", activeJob)
+			fmt.Println(err, "unable to make reference to active job", "job", activeJob)
 			continue
 		}
 		cronJob.Status.Active = append(cronJob.Status.Active, *jobRef)
 	}
 	//此处会记录我们观察到的 job 数量。为便于调试，略微提高日志级别。注意，这里没有使用 格式化字符串，使用由键值对构成的固定格式信息来输出日志。这样更易于过滤和查询日志
-	log.V(1).Info("job count", "active jobs", len(activeJobs), "successful jobs", len(successfulJobs), "failed jobs", len(failedJobs))
+	fmt.Println("job count", "active jobs", len(activeJobs), "successful jobs", len(successfulJobs), "failed jobs", len(failedJobs))
 
 	//使用收集到日期信息来更新 CRD 状态。和之前类似，通过 client 来完成操作。 针对 status 这一子资源，我们可以使用Status部分的Update方法。
 	// status 子资源会忽略掉对 spec 的变更。这与其它更新操作的发生冲突的风险更小， 而且实现了权限分离。
 	if err := r.Status().Update(ctx, &cronJob); err != nil {
-		log.Error(err, "unable to update CronJob status")
+		fmt.Println(err, "unable to update CronJob status")
 		return ctrl.Result{}, err
 	}
 	// 更新状态后，后续要确保状态符合我们在 spec 定下的预期。
@@ -193,9 +195,9 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				break
 			}
 			if err := r.Delete(ctx, job, client.PropagationPolicy(metav1.DeletePropagationBackground)); client.IgnoreNotFound(err) != nil {
-				log.Error(err, "unable to delete old failed job", "job", job)
+				fmt.Println(err, "unable to delete old failed job", "job", job)
 			} else {
-				log.V(0).Info("deleted old failed job", "job", job)
+				fmt.Println("deleted old failed job", "job", job)
 			}
 		}
 	}
@@ -212,9 +214,9 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				break
 			}
 			if err := r.Delete(ctx, job, client.PropagationPolicy(metav1.DeletePropagationBackground)); (err) != nil {
-				log.Error(err, "unable to delete old successful job", "job", job)
+				fmt.Println(err, "unable to delete old successful job", "job", job)
 			} else {
-				log.V(0).Info("deleted old successful job", "job", job)
+				fmt.Println("deleted old successful job", "job", job)
 			}
 		}
 	}
@@ -222,7 +224,7 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// 4. 检查是否被挂起
 	// 如果当前 cronjob 被挂起，不会再运行其下的任何 job，我们将其停止。这对于某些 job 出现异常 的排查非常有用。我们无需删除 cronjob 来中止其后续其他 job 的运行。
 	if cronJob.Spec.Suspend != nil && *cronJob.Spec.Suspend {
-		log.V(1).Info("cronjob suspended, skipping")
+		fmt.Println("cronjob suspended, skipping")
 		return ctrl.Result{}, nil
 	}
 
@@ -285,29 +287,29 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// 计算出定时任务下一次执行时间（或是遗漏的执行时间）
 	missedRun, nextRun, err := getNextSchedule(&cronJob, r.Now())
 	if err != nil {
-		log.Error(err, "unable to figure out CronJob schedule")
+		fmt.Println(err, "unable to figure out CronJob schedule")
 		// 重新排队直到有更新修复这次定时任务调度，不必返回错误
 		return ctrl.Result{}, nil
 	}
 	// 上述步骤执行完后，将准备好的请求加入队列直到下次执行， 然后确定这些 job 是否要实际执行
 	scheduledResult := ctrl.Result{RequeueAfter: nextRun.Sub(r.Now())} // 保存以便别处复用
-	log = log.WithValues("now", r.Now(), "next run", nextRun)
+	//log = log.WithValues("now", r.Now(), "next run", nextRun)
 
 	// 6. 如果 job 符合执行时机，并且没有超出截止时间，且不被并发策略阻塞，执行该 job
 	// 如果 job 遗漏了一次执行，且还没超出截止时间，把遗漏的这次执行也补上
 	if missedRun.IsZero() {
-		log.V(1).Info("no upcoming scheduled times, sleeping until next")
+		fmt.Println("no upcoming scheduled times, sleeping until next")
 		return scheduledResult, nil
 	}
 
 	// 确保错过的执行没有超过截止时间
-	log = log.WithValues("current run", missedRun)
+	//log = log.WithValues("current run", missedRun)
 	tooLate := false
 	if cronJob.Spec.StartingDeadlineSeconds != nil {
 		tooLate = missedRun.Add(time.Duration(*cronJob.Spec.StartingDeadlineSeconds) * time.Second).Before(r.Now())
 	}
 	if tooLate {
-		log.V(1).Info("missed starting deadline for last run, sleeping till next")
+		fmt.Println("missed starting deadline for last run, sleeping till next")
 		// TODO(directxman12): events
 		return scheduledResult, nil
 	}
@@ -319,7 +321,7 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// 确定要 job 的执行策略 —— 并发策略可能禁止多个job同时运行
 	if cronJob.Spec.ConcurrencyPolicy == batch.ForbidConcurrent && len(activeJobs) > 0 {
-		log.V(1).Info("concurrency policy blocks concurrent runs, skipping", "num active", len(activeJobs))
+		fmt.Println("concurrency policy blocks concurrent runs, skipping", "num active", len(activeJobs))
 		return scheduledResult, nil
 	}
 
@@ -328,7 +330,7 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		for _, activeJob := range activeJobs {
 			// we don't care if the job was already deleted
 			if err := r.Delete(ctx, activeJob, client.PropagationPolicy(metav1.DeletePropagationBackground)); client.IgnoreNotFound(err) != nil {
-				log.Error(err, "unable to delete active job", "job", activeJob)
+				fmt.Println(err, "unable to delete active job", "job", activeJob)
 				return ctrl.Result{}, err
 			}
 		}
@@ -367,18 +369,18 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// 构建 job
 	job, err := constructJobForCronJob(&cronJob, missedRun)
 	if err != nil {
-		log.Error(err, "unable to construct job from template")
+		fmt.Println(err, "unable to construct job from template")
 		// job 的 spec 没有变更，无需重新排队
 		return scheduledResult, nil
 	}
 
 	// ...在集群中创建 job
 	if err := r.Create(ctx, job); err != nil {
-		log.Error(err, "unable to create Job for CronJob", "job", job)
+		fmt.Println(err, "unable to create Job for CronJob", "job", job)
 		return ctrl.Result{}, err
 	}
 
-	log.V(1).Info("created Job for CronJob run", "job", job)
+	fmt.Println("created Job for CronJob run", "job", job)
 
 	// 7. 当 job 开始运行或到了 job 下一次的执行时间，重新排队
 	// 最终我们返回上述预备的结果。我们还需重新排队当任务还有下一次执行时。 这被视作最长截止时间——如果期间发生了变更，例如 job 被提前启动或是提前 结束，或被修改，我们可能会更早进行调谐。
@@ -424,6 +426,7 @@ func (r *CronJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// ...是 CronJob，返回
 		return []string{owner.Name}
 	}); err != nil {
+		fmt.Println("报错1：", err)
 		return err
 	}
 
