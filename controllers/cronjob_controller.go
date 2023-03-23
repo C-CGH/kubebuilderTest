@@ -162,7 +162,7 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 	cronJob.Status.Active = nil
 	for _, activeJob := range activeJobs {
-		jobRef, err := ref.GetReference(r.Scheme, activeJob)
+		jobRef, err := ref.GetReference(r.Scheme, activeJob) // fixme
 		if err != nil {
 			fmt.Println(err, "unable to make reference to active job", "job", activeJob)
 			continue
@@ -174,7 +174,7 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	//使用收集到日期信息来更新 CRD 状态。和之前类似，通过 client 来完成操作。 针对 status 这一子资源，我们可以使用Status部分的Update方法。
 	// status 子资源会忽略掉对 spec 的变更。这与其它更新操作的发生冲突的风险更小， 而且实现了权限分离。
-	if err := r.Status().Update(ctx, &cronJob); err != nil {
+	if err := r.Status().Update(ctx, &cronJob); err != nil { // fixme 更新状态
 		fmt.Println(err, "unable to update CronJob status")
 		return ctrl.Result{}, err
 	}
@@ -360,7 +360,7 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		for k, v := range cronJob.Spec.JobTemplate.Labels {
 			job.Labels[k] = v
 		}
-		if err := ctrl.SetControllerReference(cronJob, job, r.Scheme); err != nil {
+		if err := ctrl.SetControllerReference(cronJob, job, r.Scheme); err != nil { // fixme 设置ControllerReference
 			return nil, err
 		}
 
