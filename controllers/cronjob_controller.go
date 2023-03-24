@@ -392,6 +392,8 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 }
 
 var (
+	// 感觉这个有问题啊，没这个字段啊
+	// 看下client.MatchingFields，里面是说可以是索引，所以即使字段不存在也没关系？
 	jobOwnerKey = ".metadata.controller"
 	apiGVStr    = batch.GroupVersion.String()
 )
@@ -411,10 +413,11 @@ func (r *CronJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		r.Clock = realClock{}
 	}
 
+	// 这是用来加索引的，把job和自定义的cronjob的关系缓存起来
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &kbatch.Job{}, jobOwnerKey, func(rawObj client.Object) []string {
 		//获取 job 对象，提取 owner...
 		job := rawObj.(*kbatch.Job)
-		owner := metav1.GetControllerOf(job)
+		owner := metav1.GetControllerOf(job) //fixme
 		if owner == nil {
 			return nil
 		}
